@@ -21,7 +21,7 @@ def run_test2():
         code = file.read()
     tree = LexAndYaccParser.build_abstract_syntax_tree(code)
     print('------------------------------------------------')
-    ir_tree = IRTree.build_IR_tree(tree.children[0].children[1])
+    ir_tree = IRTree.build_IR_tree(tree)
     pprint.pprint(IRTree.to_list(ir_tree), indent = 4)
     # IRTree.test(tree)
 
