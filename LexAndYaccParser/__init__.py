@@ -144,14 +144,20 @@ def t_ID(t):
     return t
 
 
+# 去掉
 def t_COMMENT(t):
     r'/[*](.|\n)*?[*]/'
     t.lexer.lineno += t.value.count("\n")
-    pass
 
 
 def t_newline(t):
     r'\n+'
+    t.lexer.lineno += t.value.count("\n")
+    pass
+
+
+def t_COMMENT_LINE(t):
+    r'//[^\n]*'
     t.lexer.lineno += t.value.count("\n")
 
 
@@ -396,7 +402,7 @@ def p_ty_arrTy(p):
 
 def p_ty_recTy(p):
     """ty : '{' fieldDecCommaStar '}'"""
-    p[0] = ATree.RecTy(p[1], (p.lineno(1), p.lexpos(1)))
+    p[0] = ATree.RecTy(p[2], (p.lineno(1), p.lexpos(1)))
 
 
 def p_fieldDec(p):
