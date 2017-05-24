@@ -337,7 +337,7 @@ def p_expr_recCreate(p):
 
 def p_fieldCreate(p):
     """fieldCreate : ID '=' expr"""
-    p[0] = ATree.FieldExp(p[1], p[3], (p.lineno(1), p.lexpos(1)))
+    p[0] = ATree.FieldCreate(p[1], p[3], (p.lineno(1), p.lexpos(1)))
 
 
 def p_expr_ifThen(p):

@@ -47,8 +47,8 @@ def print_table(tab):
             # print(item[-1]['key'], end=" ")
             # print(item[-1]['value'])
             for i in item:
-                print(i['key'], end=" ")
-                print(i['value'], end=" ")
+                pprint.pprint(i['key'])
+                pprint.pprint(i['value'])
             print(' ')
 
 

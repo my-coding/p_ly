@@ -10,7 +10,7 @@ import pprint
 
 
 def run_test():
-    with open("tiger1.tig") as file:
+    with open("queens.tig") as file:
         code = file.read()
     tree = LexAndYaccParser.build_abstract_syntax_tree(code)
     pprint.pprint(ATree.to_list(tree), indent = 2)
