@@ -138,16 +138,10 @@ def form_escape_list(obj):
     return r
 
 
-# def field_dec(obj):
-#     access = [_level, frame.get_frame(_level)]
-#     env.enter(_venv, '_var_'+obj.children[0], [access, env.look(_tenv, obj.children[1])])
-
-
 declare = {
     'TyDec': type_dec,
     'VarDec': var_dec,
     'FunDec': fun_dec,
-    # 'FieldDec': field_dec,
 }
 
 
@@ -263,9 +257,7 @@ def call_exp(obj):
     else:
         error(obj.pos, "call error, function except less arguments : %s"%(obj.children[0]))
 
-    # return tree.Call([fun_entry[0], fun_entry[1]], field)
     fr = frame.get_frame_by_name(fun_entry[0], fun_entry[1])
-    # print(fr['formals'])
     return tree.Call(tree.Name(fun_entry[1]),
                      [fr['formals'], field], fun_entry[3])
 
@@ -464,7 +456,6 @@ def record_var(obj):
     index = find_record_index(t[1][1], obj.children[1])
     if index is None:
         error(obj.pos, "no such record item : \'%s\'"%(obj.children[1]))
-    # print(t[1][1][index][1])
     return tree.Mem(tree.Binop('+', build_IR_tree_exp(obj.children[0]),
                     tree.Binop('*', tree.Const(index), tree.Const(frame.WORD_SIZE))),
                     t[1][1][index][1])
@@ -523,44 +514,30 @@ def init_venv():
               [_level + 1, l4, ['TY_INT'], 'TY_STRING'])
 
 
+def in_frame_print():
+    print('---------------level------------------')
+    pprint.pprint(frame.get_level_in_frame())
+    print('---------------string------------------')
+    pprint.pprint(frame.get_string_in_frame())
+    print('----------------function-----------------')
+    f = frame.get_function_in_frame()
+    for i in f:
+        print(i[0])
+        print(i[1])
+        print(i[2])
+        pprint.pprint(to_list(i[3]))
+        print('------------------------------')
+
+
 def build_IR_tree(obj):
     init_venv()
     r = build_IR_tree_exp(obj)
-    print("-------tenv-------")
-    env.print_table(_tenv)
-    print("-------venv-------")
-    env.print_table(_venv)
-    print("------level--------")
-    print(_level)
-    pprint.pprint(frame._level)
-    print("--------str--------")
-    pprint.pprint(frame._string)
-    print("------func--------")
-    pprint.pprint(frame._function)
-    print("------------------")
+    in_frame_print()
     return r
 
 
 def error(pos, msg):
     print("At (%d, %d) %s" % (pos[0], pos[1], msg))
-
-
-def un_ex(obj):
-    if obj.kind == 'ex':
-        return obj
-    elif obj.kind == 'un':
-        return tree.Eseq(obj, tree.Const(0))
-    elif obj.kind == 'cx':
-        t = env.new_temp()
-        t = env.new_temp()
-        f = env.new_temp()
-        return tree.Eseq( ir_seq_list(
-            tree.Move(tree.Temp(r), tree.Const(1)),
-            obj, tree.Label(f),
-            tree.Move(tree.Temp(r), tree.Const(0)), tree.Label(t)
-        ), tree.Temp(t))
-    else:
-        print("error kind of IRtree")
 
 
 def un_cx(obj, t, f):

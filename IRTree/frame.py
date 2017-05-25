@@ -92,6 +92,16 @@ def in_frame():
     return _string + _function
 
 
+def get_string_in_frame():
+    return _string
+
+def get_function_in_frame():
+    return _function
+
+def get_level_in_frame():
+    return _level
+
+
 if __name__ == '__main__':
     new_level_item(0, 'L0', [True,True])
     new_level_item(0, 'L2', [True,True])
