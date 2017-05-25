@@ -76,7 +76,7 @@ def var_dec(obj):
         error(obj.pos, "variable type error, no shch type :", obj.children[1])
         return []
 
-    env.enter(_venv, '_var_' + obj.children[0], [access, type])
+    env.enter(_venv, '_var_' + obj.children[0], [access, t])
     return tree.Move(simple_var(obj), build_IR_tree_exp(obj.children[2]))
 
 
@@ -172,12 +172,6 @@ def let_exp(obj):
     for exp in obj.children[1]:
         r.append(build_IR_tree_exp(exp))
 
-
-    print("-------tenv-------")
-    env.print_table(_tenv)
-    print("-------venv-------")
-    env.print_table(_venv)
-
     env.end_scope(_tenv)
     env.end_scope(_venv)
     return ir_seq_list(r)
@@ -214,7 +208,7 @@ def call_exp(obj):
     fun_entry = env.look(_venv, '_func_'+obj.children[0])
     if not fun_entry:
         error(obj.pos, "call error, no such function:", obj.children[0])
-
+        return []
     i = 0
     field = []
     if len(obj.children[1]) == len(fun_entry[2]):
@@ -462,15 +456,30 @@ def init_venv():
     frame.new_level_item(_level+1, l1, [])
     env.enter(_venv, env.symbol('_func_print'),
               [_level+1, l1, ['TY_STRING'], 'TY_INT'])
+
     l2 = env.new_label()
     frame.new_level_item(_level+1, l2, [])
     env.enter(_venv, env.symbol('_func_getchar'),
               [_level+1, l2, [], 'TY_STRING'])
 
+    l3 = env.new_label()
+    frame.new_level_item(_level+1, l3, [])
+    env.enter(_venv, env.symbol('_func_ord'),
+              [_level+1, l3, ['TY_STRING'], 'TY_INT'])
+
+    l4 = env.new_label()
+    frame.new_level_item(_level + 1, l4, [])
+    env.enter(_venv, env.symbol('_func_chr'),
+              [_level + 1, l4, ['TY_INT'], 'TY_STRING'])
+
 
 def build_IR_tree(obj):
     init_venv()
     r = build_IR_tree_exp(obj)
+    print("-------tenv-------")
+    env.print_table(_tenv)
+    print("-------venv-------")
+    env.print_table(_venv)
     print("------level--------")
     print(_level)
     pprint.pprint(frame._level)
