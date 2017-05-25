@@ -1,6 +1,6 @@
 import IRTree.tree as tree
-import IRTree.env as env
 import IRTree.frame as frame
+import IRTree.env as env
 import pprint
 
 _level = 0
@@ -11,8 +11,7 @@ _venv = env.base_venv()
 def array_type(obj):
     t = env.look(_tenv, obj.children[0])
     if t == None:
-        # print('arr type error')
-        error(obj.pos, "type error, not exist arrayType :", obj.children[0])
+        error(obj.pos, "type error, not exist arrayType : %s" % (obj.children[0]))
     else:
         env.pop(_tenv)
         return ['TY_ARRAY', t]
@@ -23,7 +22,7 @@ def record_type(obj):
     for item in obj.children[0]:
         tt = env.look(_tenv, item.children[1])
         if tt == None:
-            error(obj.pos, "type error, record :", item.children[1])
+            error(obj.pos, "type error, record : %s" % (item.children[1]))
         elif tt == 'Null' :
             t.append([item.children[0], 'TY_RECORD'])
         else:
@@ -35,8 +34,7 @@ def record_type(obj):
 def name_type(obj):
     t = env.look(_tenv, obj.children[0])
     if (t == None):
-        # print('arr type error')
-        error(obj.pos, "type error, name :", obj.children[0])
+        error(obj.pos, "type error : %s" % (obj.children[0]))
     else:
         env.pop(_tenv)
         return ['TY_NAME', t]
@@ -58,7 +56,7 @@ def build_IR_tree_type(obj):
 # 还需要考虑无限递归
 def type_dec(obj):
     if (env.look(_tenv, obj.children[0])):
-        error(obj.pos, "type error, redefined :", obj.children[0])
+        error(obj.pos, "type error, redefined : %s" % (obj.children[0]))
     env.enter(_tenv, obj.children[0], 'Null')
     env.enter(_tenv, obj.children[0], build_IR_tree_type(obj.children[1]))
     return []
@@ -70,14 +68,24 @@ def var_dec(obj):
     access = [_level, frame.alloc_local(frame.get_frame(_level), [True])]
 
     t = env.look(_tenv, obj.children[1])
-    if obj.children[1] == None:
-        t = 'unknown'            # 换成表达式对应的type
-    elif not t:
-        error(obj.pos, "variable type error, no shch type :", obj.children[1])
+    value = build_IR_tree_exp(obj.children[2])
+    if obj.children[1] is None:
+        t = value.ty
+    elif t is None:
+        error(obj.pos, "variable type error, no shch type : %s" % (obj.children[1]))
+        return []
+    elif t != value.ty:
+        error(obj.pos, "type error, the exprression is %s type not %s type" % (value.ty, t))
         return []
 
+    if env.look(_venv, '_var_' + obj.children[0]):
+        error(obj.pos, "variable redefined : %s" % (obj.children[0]))
+# 保存数组大小
+    if (t[0] == 'TY_ARRAY') and (len(t) == 2):
+        # t += [obj.children[2].children[1].children[0]]
+        t += [build_IR_tree_exp(obj.children[2].children[1])]
     env.enter(_venv, '_var_' + obj.children[0], [access, t])
-    return tree.Move(simple_var(obj), build_IR_tree_exp(obj.children[2]))
+    return tree.Move(simple_var(obj), value)
 
 
 # FunDec
@@ -85,9 +93,8 @@ def var_dec(obj):
 def fun_dec(obj):
     global _level
     _level += 1
-    if(env.look(_venv, '_func_'+obj.children[0])):
-        error(obj.pos, "function redefined :", obj.children[0])
-        return []
+    if env.look(_venv, '_func_'+obj.children[0]):
+        error(obj.pos, "function redefined : %s" % (obj.children[0]))
 
     fun_label = env.new_label()
     formals = para_list(obj.children[1])
@@ -100,14 +107,19 @@ def fun_dec(obj):
               [_level, fun_label, formals, result_type])
 
     env.begin_scope(_venv)
-    fieldList = []
-    for item in obj.children[1]:
-        build_IR_tree_dec(item)
+    # fieldList = []
+    # for item in obj.children[1]:
+        # build_IR_tree_dec(item)
+    i = 0
+    while i<len(obj.children[1]):
+        access = [_level, frame.get_frame(_level)['formals'][i]]
+        env.enter(_venv, '_var_' + obj.children[1][i].children[0], [access, env.look(_tenv, obj.children[1][i].children[1])])
+        i += 1
     body = build_IR_tree_exp(obj.children[3])
     env.end_scope(_venv)
 
+    frame.add_function(obj.children[0], _level-1, frame.get_frame(_level), body)
     _level -= 1
-    # 把数存到fragment里
     return []
 
 
@@ -126,16 +138,16 @@ def form_escape_list(obj):
     return r
 
 
-def field_dec(obj):
-    access = [_level, frame.alloc_local(frame.get_frame(_level), [True])]
-    env.enter(_venv, '_var_' + obj.children[0], [access, env.look(_tenv, obj.children[1])])
+# def field_dec(obj):
+#     access = [_level, frame.get_frame(_level)]
+#     env.enter(_venv, '_var_'+obj.children[0], [access, env.look(_tenv, obj.children[1])])
 
 
 declare = {
     'TyDec': type_dec,
     'VarDec': var_dec,
     'FunDec': fun_dec,
-    'FieldDec': field_dec,
+    # 'FieldDec': field_dec,
 }
 
 
@@ -150,9 +162,9 @@ def ir_seq_list(seq_list):
     if (l == 1):
         return seq_list[0]
     if (l == 2):
-        return tree.Seq(seq_list[0], seq_list[1])
+        return tree.Seq(seq_list[0], seq_list[1], seq_list[1].ty)
     t = seq_list.pop(0)
-    return tree.Seq(t, ir_seq_list(seq_list))
+    return tree.Seq(t, ir_seq_list(seq_list), seq_list[-1].ty)
 
 
 def program(obj):
@@ -167,10 +179,17 @@ def let_exp(obj):
     for dec in obj.children[0]:
         for item in dec:
             dec_r = build_IR_tree_dec(item)
-            if dec_r != []:
+            if dec_r:
                 r.append(dec_r)
     for exp in obj.children[1]:
-        r.append(build_IR_tree_exp(exp))
+        exp_r = build_IR_tree_exp(exp)
+        if exp_r:
+            r.append(exp_r)
+
+    # print("-------tenv-------")
+    # env.print_table(_tenv)
+    # print("-------venv-------")
+    # env.print_table(_venv)
 
     env.end_scope(_tenv)
     env.end_scope(_venv)
@@ -178,37 +197,59 @@ def let_exp(obj):
 
 
 def const_exp(obj):
-    return tree.Const(obj.children[0], 'ex')
+    return tree.Const(obj.children[0], 'TY_INT')
 
 
 def binop_exp(obj):
     o = obj.children[1]
     e1 = build_IR_tree_exp(obj.children[0])
     e2 = build_IR_tree_exp(obj.children[2])
-    return tree.Binop(o, e1, e2, 'ex')
+    if o in ['+', '-', '*', '/']:
+        if (e1.ty != 'TY_INT') and (e2.ty != 'TY_INT'):
+            error(obj.pos, 'unsupported operand type(s) for %s: \'%s\' and \'%s\'' % (o, e1.ty, e2.ty))
+        return tree.Binop(o, e1, e2, 'TY_INT')
+    if o in ['<', '<=', '>', '>=', '<>', '=']:
+        if ((type(e1.ty) is list) and (e1.ty[0] == 'TY_RECORD') and (e2.ty == 'TY_NIL')) \
+                or ((type(e2.ty) is list) and (e2.ty[0] == 'TY_RECORD') and (e1.ty == 'TY_NIL')):
+            return tree.Binop(o, e1, e2, 'TY_INT')
+        elif e1.ty != e2.ty:
+            error(obj.pos, 'unsupported operand type(s) for %s: \'%s\' and \'%s\'' % (o, e1.ty, e2.ty))
+        # elif e1.ty not in ['TY_INT', 'TY_STRING']:
+        #     error(obj.pos, 'unsupported operand type(s) for %s: \'%s\' and \'%s\', only for int and string' % (o, e1.ty, e2.ty))
+
+        if e1.ty == 'TY_STRING':
+            stmt = tree.Call(tree.Name("__strcmp__"), [e1, e2])
+            return tree.Binop(o, stmt, tree.Const(0), 'TY_INT')
+        else:
+            return tree.Binop(o, e1, e2, 'TY_INT')
 
 
 def string_exp(obj):
     # return name(obj.children[0])
-    label = env.new_temp()
-    return tree.Name(label)
+    lab = env.new_temp()
+    frame.add_string(lab, obj.children[0])
+    return tree.Name(lab, 'TY_STRING')
 
 
 def move_exp(obj):
     dst = build_IR_tree_exp(obj.children[0])
     src = build_IR_tree_exp(obj.children[1])
+
+    if dst.ty != src.ty:
+        error(obj.pos, "can not assign %s to %s" % (src.ty, dst.ty))
     return tree.Move(dst, src)
 
 
 def nil_exp(obj):
-    return tree.Const(0, 'ex')
+    return tree.Const(0,  'TY_NIL')
 
 
 def call_exp(obj):
     fun_entry = env.look(_venv, '_func_'+obj.children[0])
     if not fun_entry:
-        error(obj.pos, "call error, no such function:", obj.children[0])
-        return []
+        error(obj.pos, "call error, no such function: %s" % (obj.children[0]))
+        return None
+
     i = 0
     field = []
     if len(obj.children[1]) == len(fun_entry[2]):
@@ -218,17 +259,15 @@ def call_exp(obj):
             field.append(item)
             i+=1
     elif len(obj.children[1]) <= len(fun_entry[2]):
-        error(obj.pos, "call error, function except more arguments :", obj.children[0])
+        error(obj.pos, "call error, function except more arguments : %s"%(obj.children[0]))
     else:
-        error(obj.pos, "call error, function except less arguments :", obj.children[0])
+        error(obj.pos, "call error, function except less arguments : %s"%(obj.children[0]))
 
     # return tree.Call([fun_entry[0], fun_entry[1]], field)
     fr = frame.get_frame_by_name(fun_entry[0], fun_entry[1])
-    print(fr['formals'])
-    return tree.Call(
-        tree.Name(fun_entry[1]),
-        [fr['formals'], field]
-    )
+    # print(fr['formals'])
+    return tree.Call(tree.Name(fun_entry[1]),
+                     [fr['formals'], field], fun_entry[3])
 
 
 def seq_exp(obj):
@@ -238,59 +277,48 @@ def seq_exp(obj):
     return ir_seq_list(r)
 
 
-def label(lab):
-    return tree.Label(lab)
-
-
-def name(lab):
-    return tree.Name(lab)
-
-
-def to_condition(obj, t, f):
-    if(obj.__class__.__name__ == 'SimpleVar'):
-        return tree.Cjump(['!='], build_IR_tree_exp(obj),
-                          tree.Const('0', 'ex'), name(t), name(f), 'ex')
-        return []
-    elif (obj.__class__.__name__ == 'Binop'):
-        return tree.Cjump([obj.children[1]], build_IR_tree_exp(obj.children[0]),
-                          build_IR_tree_exp(obj.children[2]), name(t), name(f), 'ex')
-    else:
-        return tree.Cjump(['!='], build_IR_tree_exp(obj),
-                          tree.Const('0', 'ex'), name(t), name(f, ), 'ex')
-
-
 def if_then_else_exp(obj):
     t = env.new_label()
     f = env.new_label()
     done = env.new_label()
     result = env.new_temp()
 
-    r = []
-    r.append(to_condition(obj.children[0], t, f))
+    e1 = build_IR_tree_exp(obj.children[0])
+    if e1.ty != 'TY_INT':
+        error(obj.pos, "if condition must be int not %s" % (e1.ty))
 
-    r.append(label(t))
-    r.append(tree.Move(tree.Mem(result), build_IR_tree_exp(obj.children[1])))
-    r.append(tree.Jump(name(done), [done]))
+    e2 = build_IR_tree_exp(obj.children[1])
+    e3 = build_IR_tree_exp(obj.children[2])
+    if (e2.ty != e3.ty) \
+            and not(((type(e2.ty) is list) and (e2.ty[0] == 'TY_RECORD') and (e3.ty == 'TY_NIL')) \
+            or ((type(e3.ty) is list) and (e3.ty[0] == 'TY_RECORD') and (e2.ty == 'TY_NIL'))):
+        error(obj.pos, "then type : %s doesn't match else type : %s" % (e2.ty, e3.ty))
 
-    r.append(label(f))
-    r.append(tree.Move(tree.Mem(result), build_IR_tree_exp(obj.children[2])))
-    r.append(label(done))
-    s = ir_seq_list(r)
-    e = tree.Temp(result, 'ex')
-    return tree.Eseq(s, e, 'ex')
+    return tree.Eseq(ir_seq_list([un_cx(e1, t, f),
+                                  tree.Label(t),
+                                  tree.Move(tree.Mem(result), e2),
+                                  tree.Jump(tree.Name(done), [done]),
+                                  tree.Label(f),
+                                  tree.Move(tree.Mem(result), e3),
+                                  tree.Label(done)]),
+                     tree.Temp(result), e2.ty)
 
 
 def if_then_exp(obj):
     t = env.new_label()
     f = env.new_label()
 
-    r = []
-    r.append(to_condition(obj.children[0], t, f))
-    r.append(label(t))
-    r.append(build_IR_tree_exp(obj.children[1]))
-    r.append(label(f))
+    e1 = build_IR_tree_exp(obj.children[0])
+    if e1.ty != 'TY_INT':
+        error(obj.pos, "if condition must be int not %s" % (e1.ty))
+    e2 = build_IR_tree_exp(obj.children[1])
+    if e2.ty != 'TY_VOID':
+        error(obj.pos, "if then's body must be TY_VOID, unsupport %s type" % (e2.ty))
 
-    return ir_seq_list(r)
+    return ir_seq_list([un_cx(e1, t, f),
+                        tree.Label(t),
+                        e2,
+                        tree.Label(f)])
 
 
 def while_exp(obj):
@@ -298,14 +326,19 @@ def while_exp(obj):
     loop = env.new_label()
     done = env.new_label()
 
-    r = []
-    r.append(label(start))
-    r.append(to_condition(obj.children[0], loop, done))
-    r.append(label(loop))
-    r.append(build_IR_tree_exp(obj.children[1]))
-    r.append(tree.Jump(name(start), [start]))
-    r.append(label(done))
-    return ir_seq_list(r)
+    e1 = build_IR_tree_exp(obj.children[0])
+    if e1.ty != 'TY_INT':
+        error(obj.pos, "while's condition must be int not %s" % (e1.ty))
+
+    e2 = build_IR_tree_exp(obj.children[1])
+    if e2.ty != 'TY_VOID':
+        error(obj.pos, "while's body must be TY_VOID, unsupport %s type" % (e2.ty))
+
+    return ir_seq_list([tree.Label(start),
+                        un_cx(e1, loop, done),
+                        tree.Label(loop), e2,
+                        tree.Jump(tree.Name(start), [start]),
+                        tree.Label(done)])
 
 
 def for_exp(obj):
@@ -315,77 +348,91 @@ def for_exp(obj):
 
     env.begin_scope(_venv)
     access = [_level, frame.alloc_local(frame.get_frame(_level), [True])]
+    if env.look(_venv, '_var_' + obj.children[0]):
+        error(obj.pos, "for's variable redefined : %s" % (obj.children[0]))
+
     env.enter(_venv, '_var_' + obj.children[0], [access, 'TY_INT'])
     var = frame.expr(access[1], frame.fp())
 
-    r = []
-    r.append(tree.Move(var, build_IR_tree_exp(obj.children[1])))
-    r.append(label(start))
-    r.append(tree.Cjump(['<='], var, build_IR_tree_exp(obj.children[2]), name(loop), name(done)))
-    r.append(label(loop))
-    r.append(build_IR_tree_exp(obj.children[3]))
-    r.append(tree.Move(var, tree.Binop('+', var, tree.Const(1))))
-    r.append(tree.Jump(name(start), [start]))
-    r.append(label(done))
+    e1 = build_IR_tree_exp(obj.children[1])
+    e2 = build_IR_tree_exp(obj.children[2])
+    e3 = build_IR_tree_exp(obj.children[3])
+    if e3.ty != 'TY_VOID':
+        error(obj.pos, "for's body must be TY_VOID, unsupport %s type" % (e2.ty))
 
     env.end_scope(_venv)
-    return ir_seq_list(r)
+    return ir_seq_list([tree.Move(var, e1),
+                        tree.Label(start),
+                        tree.Cjump(['<='], var, e2, tree.Name(loop), tree.Name(done)),
+                        tree.Label(loop), e3,
+                        tree.Move(var, tree.Binop('+', var, tree.Const(1))),
+                        tree.Jump(tree.Name(start), [start]), tree.Label(done)])
 
 
 def break_exp(obj):
-    return []
+    return None
 
 
 def simple_var(obj):
-    # return tree.Mem(obj.children[0], 'ex')
     var = env.look(_venv, '_var_'+obj.children[0])
     if not var:
-        error(obj.pos, 'variable not declare :', obj.children[0])
-        return []
-    return frame.expr(var[0][1], frame.fp())
+        error(obj.pos, 'variable not declare : %s' % (obj.children[0]))
+        return tree.Const(0,  'TY_INT')
+    return frame.expr(var[0][1], frame.fp(), var[1])
 
 
 def array_create(obj):
-    # print(obj)
     t = env.look(_tenv, obj.children[0])
     if not t:
-        error(obj.pos, 'no such type :', obj.children[0])
+        error(obj.pos, 'no such type : %s' % (obj.children[0]))
+        return None
     if t[0] != 'TY_ARRAY':
-        error(obj.pos, 'type is not array :', obj.children[0])
+        error(obj.pos, '%s is not array' % (obj.children[0]))
+        return None
     size = build_IR_tree_exp(obj.children[1])
     init = build_IR_tree_exp(obj.children[2])
+    if size.ty != 'TY_INT':
+        error(obj.pos, 'size of array unsupport %s' % (size.ty))
+        return None
+    if t[1] != init.ty:
+        error(obj.pos, 'need %s not %s' % (t, init.ty))
+    return tree.Call(tree.Name("__arrayCreate__"), [size, init], t)
 
-    return tree.Call(tree.Name("__arrayCreate__"), [size, init])
 
-
-def array_var(obj):
-    # print(obj)
+def array_sub(obj):
     var = build_IR_tree_exp(obj.children[0])
-    # print(to_list(var))
+    if var.ty[0] != 'TY_ARRAY':
+        error(obj.pos, 'need array type not %s' % (var.ty))
+        return None
+
     sub = build_IR_tree_exp(obj.children[1])
-    # 类型检查,var是否为array，init是否为int
-    return tree.Mem(tree.Binop('+', var,
-                               tree.Binop('*', sub,
-                                          tree.Const(frame.WORD_SIZE))))
+    if sub.ty != 'TY_INT':
+        error(obj.pos, 'array sub need TY_INT not %s' % (sub.ty))
+        return None
+
+    return tree.Mem(tree.Binop('+', var, tree.Binop('*', sub, tree.Const(frame.WORD_SIZE))), var.ty[1])
 
 
 def record_create(obj):
-    # print(obj)
-    type = env.look(_tenv, obj.children[0])
+    t = env.look(_tenv, obj.children[0])
     addr = tree.Temp(env.new_temp())
 
-    if not type:
-        error(obj.pos, 'no such type :', obj.children[0])
-    if type[0] != 'TY_RECORD':
-        error(obj.pos, 'type is not record :', obj.children[0])
-    size = len(type[1])
+    if not t:
+        error(obj.pos, 'no such type : %s' % (obj.children[0]))
+        return None
+    if t[0] != 'TY_RECORD':
+        error(obj.pos, 'type is not record : %s' % (obj.children[0]))
+        return None
+    size = len(t[1])
     if len(obj.children[1]) != size:
-        error(obj.pos, 'need %d items, but give %d in record:' % (len(obj.children[1]), size), obj.children[0])
+        error(obj.pos, 'need %d items, but give %d items in record: %s' % (len(obj.children[1]), size, obj.children[0]))
 
     i = 0
     record = []
     while i < size:
-        index = find_record_index(type[1], obj.children[1][i].children[0])
+        index = find_record_index(t[1], obj.children[1][i].children[0])
+        if index is None:
+            error(obj.pos, "record create error, type %s has no such item : \'%s\'" % (obj.children[0], obj.children[1][i].children[0]))
         value = build_IR_tree_exp(obj.children[1][i])
         location = tree.Binop('+', addr, tree.Const(index*frame.WORD_SIZE))
         record.append(tree.Move(tree.Mem(location), value))
@@ -393,7 +440,7 @@ def record_create(obj):
 
     alloc = tree.Call(tree.Name("__recordCreate__"), [size])
     r = [tree.Move(addr, alloc)] + record
-    return tree.Eseq(ir_seq_list(r), addr)
+    return tree.Eseq(ir_seq_list(r), addr, t)
 
 
 def find_record_index(l, var):
@@ -409,15 +456,18 @@ def field_create(obj):
 
 def record_var(obj):
     t = env.look(_venv, '_var_'+obj.children[0].children[0])
-    if not t:
-        error(obj.pos, 'no such variable :', obj.children[0])
+    if t is None:
+        error(obj.pos, 'no such variable %s:' % (obj.children[0]))
     elif t[1][0] != 'TY_RECORD':
-        error(obj.pos, 'variable is not record :', obj.children[0])
+        error(obj.pos, 'variable is not record : %s' % (obj.children[0]))
 
     index = find_record_index(t[1][1], obj.children[1])
-
+    if index is None:
+        error(obj.pos, "no such record item : \'%s\'"%(obj.children[1]))
+    # print(t[1][1][index][1])
     return tree.Mem(tree.Binop('+', build_IR_tree_exp(obj.children[0]),
-                    tree.Binop('*', tree.Const(index), tree.Const(frame.WORD_SIZE))))
+                    tree.Binop('*', tree.Const(index), tree.Const(frame.WORD_SIZE))),
+                    t[1][1][index][1])
 
 
 expression = {
@@ -439,7 +489,7 @@ expression = {
 
     'SimpleVar': simple_var,
     'ArrCreate': array_create,
-    'Subscript': array_var,
+    'Subscript': array_sub,
     'RecCreate': record_create,
     'FieldCreate': field_create,
     'FieldExp': record_var,
@@ -455,7 +505,7 @@ def init_venv():
     l1 = env.new_label()
     frame.new_level_item(_level+1, l1, [])
     env.enter(_venv, env.symbol('_func_print'),
-              [_level+1, l1, ['TY_STRING'], 'TY_INT'])
+              [_level+1, l1, ['TY_STRING'], 'TY_VOID'])
 
     l2 = env.new_label()
     frame.new_level_item(_level+1, l2, [])
@@ -483,12 +533,45 @@ def build_IR_tree(obj):
     print("------level--------")
     print(_level)
     pprint.pprint(frame._level)
+    print("--------str--------")
+    pprint.pprint(frame._string)
+    print("------func--------")
+    pprint.pprint(frame._function)
     print("------------------")
     return r
 
 
-def error(pos, msg, token):
-    print("At (%d, %d) %s %s" % (pos[0], pos[1], msg, token))
+def error(pos, msg):
+    print("At (%d, %d) %s" % (pos[0], pos[1], msg))
+
+
+def un_ex(obj):
+    if obj.kind == 'ex':
+        return obj
+    elif obj.kind == 'un':
+        return tree.Eseq(obj, tree.Const(0))
+    elif obj.kind == 'cx':
+        t = env.new_temp()
+        t = env.new_temp()
+        f = env.new_temp()
+        return tree.Eseq( ir_seq_list(
+            tree.Move(tree.Temp(r), tree.Const(1)),
+            obj, tree.Label(f),
+            tree.Move(tree.Temp(r), tree.Const(0)), tree.Label(t)
+        ), tree.Temp(t))
+    else:
+        print("error kind of IRtree")
+
+
+def un_cx(obj, t, f):
+    if obj.kind == 'ex':
+        return tree.Cjump(['='], obj, tree.Const(0), tree.Name(t), tree.Name(f))
+    elif obj.kind == 'un':
+        return None
+    elif obj.kind == 'cx':
+        return obj
+    else:
+        print("error kind of IRtree")
 
 
 def to_list(obj):

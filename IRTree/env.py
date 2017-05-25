@@ -1,22 +1,73 @@
-import IRTree.table as table
+import pprint
+HT_SIZE = 773
 _label = 0                        # 静态存储器地址
 _temps = 100                      # 临时变量
-_symbol = [[]] * table.HT_SIZE    # 符号列表
+_symbol = [[]] * HT_SIZE    # 符号列表
 _tempList = []                    # 临时变量环境
 
 _mark_scope = 0
 
 
+def empty():
+    tab = {
+        'top': [],
+        'table': [[]]*HT_SIZE
+    }
+    return tab
+
+
+def enter(tab, key, value):
+    index = hash(key) % HT_SIZE
+    item = {
+        'key': key,
+        'value': value,
+        'prev': tab['top']
+    }
+    if not tab['table'][index]:
+        tab['table'][index] = [item]
+    else:
+        tab['table'][index].append(item)
+    tab['top'] = tab['table'][index][-1]
+    return index
+
+
+def look(tab, key):
+    index = hash(key) % HT_SIZE
+    for item in tab['table'][index][::-1]:
+        if item['key'] == key:
+            return item['value']
+    return None
+
+
+def pop(tab):
+    if not tab['top']:
+        return None
+    index = hash(tab['top']['key']) % HT_SIZE
+    tab['top'] = tab['top']['prev']
+    return (tab['table'][index].pop())['key']
+
+
+def print_table(tab):
+    for item in tab['table']:
+        if item:
+            # print(item[-1]['key'], end=" ")
+            # print(item[-1]['value'])
+            for i in item:
+                pprint.pprint(i['key'])
+                pprint.pprint(i['value'])
+            print(' ')
+
+
 # 基本的类型环境、值环境
 def base_tenv():
-    tab = table.empty()
-    table.enter(tab, 'int', 'TY_INT')
-    table.enter(tab, 'string', 'TY_STRING')
+    tab = empty()
+    enter(tab, 'int', 'TY_INT')
+    enter(tab, 'string', 'TY_STRING')
     return tab
 
 
 def base_venv():
-    tab = table.empty()
+    tab = empty()
     return tab
 
 
@@ -25,14 +76,14 @@ def begin_scope(tab):
     global _mark_scope
     if not _mark_scope:
         _mark_scope = "<__mask__>"
-    table.enter(tab, _mark_scope, None)
+    enter(tab, _mark_scope, None)
 
 
 def end_scope(tab):
     global _mark_scope
-    mask = table.pop(tab)
+    mask = pop(tab)
     while mask != _mark_scope:
-        mask = table.pop(tab)
+        mask = pop(tab)
 
 
 # label，在_symbol之中加一项
@@ -45,7 +96,7 @@ def new_label():
 
 def symbol(buf):
     global _symbol
-    index = hash(buf) % table.HT_SIZE
+    index = hash(buf) % HT_SIZE
     for n in _symbol[index]:
         if n == buf:
             return buf
@@ -54,22 +105,6 @@ def symbol(buf):
     else:
         _symbol.append(buf)
     return buf
-
-
-def look(tab, key):
-    return table.look(tab, key)
-
-
-def enter(tab, key, value):
-    return table.enter(tab, key, value)
-
-
-def pop(tab):
-    return table.pop(tab)
-
-
-def print_table(tab):
-    table.print_table(tab)
 
 
 # temp，在_tempList之中加一项
@@ -86,7 +121,7 @@ def new_temp():
 
 # 临时变量操作
 def temp_empty():
-    return [table.empty()]
+    return [empty()]
 
 
 def temp_layerList(over, under):
@@ -94,12 +129,12 @@ def temp_layerList(over, under):
 
 
 def temp_enter(l, t, s):
-    table.enter(l[-1], t, s)
+    enter(l[-1], t, s)
 
 
 def temp_look(l, t):
     for tab in l[::-1]:
-        s = table.look(tab, t)
+        s = look(tab, t)
         if s != None:
             return s
     return None
@@ -108,7 +143,7 @@ def temp_look(l, t):
 def print_tableList(l):
     for tab in l[::-1]:
         print('temp table:')
-        table.print_table(tab)
+        print_table(tab)
 
 
 if __name__ == '__main__':
@@ -132,8 +167,8 @@ if __name__ == '__main__':
     end_scope(tmp[0])
 
     print('---------------')
-    table.print_table(tmp[0])
+    print_table(tmp[0])
 
     print('---------------')
-    table.print_table(base_tenv())
-    table.print_table(base_venv())
+    print_table(base_tenv())
+    print_table(base_venv())

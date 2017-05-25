@@ -6,6 +6,8 @@ WORD_SIZE = 4
 _level = []
 _fp = None
 _rv = None
+_string = []
+_function = []
 
 
 def new_level_item(level, name, boolList):
@@ -61,9 +63,9 @@ def fv():
     return _rv
 
 
-def expr(access, fp):
+def expr(access, fp, ty='TY_INT'):
     if access[0] == 'InFrame':
-        return tree.Mem(tree.Binop('+', tree.Temp(fp), tree.Const(access[1])))
+        return tree.Mem(tree.Binop('+', tree.Temp(fp), tree.Const(access[1])), ty)
 
 
 def alloc_local(frame, escape):
@@ -75,6 +77,21 @@ def alloc_local(frame, escape):
     frame['locals'].append(access)
     return access
 
+
+def add_string(label, str):
+    global _string
+    _string.append([label, str])
+
+
+def add_function(name, level, frame, ir):
+    global _function
+    _function.append([name, level, frame, ir])
+
+
+def in_frame():
+    return _string + _function
+
+
 if __name__ == '__main__':
     new_level_item(0, 'L0', [True,True])
     new_level_item(0, 'L2', [True,True])
@@ -84,3 +101,7 @@ if __name__ == '__main__':
     pprint.pprint(get_frame(0))
     print('-----------------------')
     pprint.pprint(get_frame(1))
+    print('-----------------------')
+    add_string('L0', 'aa')
+    add_function('aaaaaaaa', 'bbbbbbbbb')
+    pprint.pprint(in_frame())
